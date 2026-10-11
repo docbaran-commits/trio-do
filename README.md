@@ -25,7 +25,7 @@ In the GitHub repo, open **Settings → Pages** and set the source to **GitHub A
 
 `https://<your-github-name>.github.io/<repo-name>/`
 
-A project named `trio-do` on the account `davidbaran` would be [https://davidbaran.github.io/trio-do/](https://davidbaran.github.io/trio-do/).
+On the GitHub account `Docbaran-commits`, the address is [https://docbaran-commits.github.io/trio-do/](https://docbaran-commits.github.io/trio-do/).
 
 ## Put it on your iPhone
 
