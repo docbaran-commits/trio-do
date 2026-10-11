@@ -17,6 +17,16 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
+## GitHub Pages
+
+The site is a static export. Pushing `main` to GitHub runs `.github/workflows/pages.yml`.
+
+In the GitHub repo, open **Settings → Pages** and set the source to **GitHub Actions**. The site is then at:
+
+`https://<your-github-name>.github.io/<repo-name>/`
+
+A project named `trio-do` on the account `davidbaran` would be [https://davidbaran.github.io/trio-do/](https://davidbaran.github.io/trio-do/).
+
 ## Put it on your iPhone
 
 This is a progressive web app. You do not need the App Store, and you do not need a paid Apple developer account to “sign” it. Safari installs it onto the home screen, and it opens full screen without the browser toolbar.

@@ -6,7 +6,8 @@ export function PwaRegister() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return
     if (!("serviceWorker" in navigator)) return
-    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
+    navigator.serviceWorker.register(`${base}/sw.js`, { scope: `${base}/`, updateViaCache: "none" }).catch(() => {
       // The list still works without offline caching.
     })
   }, [])

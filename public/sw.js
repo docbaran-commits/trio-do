@@ -40,7 +40,7 @@ self.addEventListener("fetch", (event) => {
         const cached = await caches.match(request)
         if (cached) return cached
         if (request.mode === "navigate") {
-          const home = await caches.match("/")
+          const home = await caches.match(self.registration.scope)
           if (home) return home
         }
         return new Response("You are offline, and this page is not saved on the phone yet.", {
