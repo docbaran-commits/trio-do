@@ -207,6 +207,11 @@ export function TaskSheet({
 
             {editing && (
               <div className="space-y-2">
+                {calendarHint && (
+                  <p className="rounded-2xl bg-muted px-3 py-2 text-sm text-muted-foreground" role="status">
+                    {calendarHint}
+                  </p>
+                )}
                 <Button
                   type="button"
                   variant="outline"
@@ -221,16 +226,13 @@ export function TaskSheet({
                     })
                     setCalendarHint(
                       ok
-                        ? "Opened a calendar file. On iPhone, open it and choose Add to Calendar."
+                        ? "Calendar file ready. On iPhone, open it and choose Add to Calendar."
                         : "Couldn’t create a calendar file on this phone."
                     )
                   }}
                 >
                   Add due date to Calendar
                 </Button>
-                {calendarHint && (
-                  <p className="text-sm text-muted-foreground">{calendarHint}</p>
-                )}
               </div>
             )}
 
