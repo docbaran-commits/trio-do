@@ -27,6 +27,7 @@ import {
   CATEGORY_IDS,
   compareTasks,
   createId,
+  doneCount,
   dueInfo,
   mergeTasks,
   openCount,
@@ -51,7 +52,6 @@ export function TaskBoard() {
   const tasks = taskState.tasks
   const persisted = taskState.persisted
   const [filter, setFilter] = useState<LaneFilter>("all")
-  const [showDone, setShowDone] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
   const [status, setStatus] = useState("")
@@ -65,7 +65,11 @@ export function TaskBoard() {
     [tasks]
   )
   const doneTasks = useMemo(
-    () => tasks.filter((task) => task.done).sort(compareTasks),
+    () =>
+      [...tasks.filter((task) => task.done)].sort((a, b) => {
+        if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1
+        return compareTasks(a, b)
+      }),
     [tasks]
   )
 
@@ -91,6 +95,7 @@ export function TaskBoard() {
         task.id === editing.id ? { ...task, ...draft, updatedAt: now } : task
       )
       commit(next, `Saved ${draft.title} in ${CATEGORIES[draft.category].label}.`)
+      if (!editing.done && filter !== "done") setFilter(draft.category)
     } else {
       const task: Task = {
         id: createId(),
@@ -100,11 +105,12 @@ export function TaskBoard() {
         updatedAt: now,
       }
       commit([task, ...tasks], `Added ${draft.title} to ${CATEGORIES[draft.category].label}.`)
+      if (filter === "done") setFilter(draft.category)
+      else if (filter !== "all") setFilter(draft.category)
       window.setTimeout(() => {
         document.querySelector(`[data-task-id="${task.id}"]`)?.scrollIntoView({ block: "nearest" })
       }, 50)
     }
-    if (filter !== "all") setFilter(draft.category)
     setSheetOpen(false)
     setEditing(null)
   }
@@ -121,12 +127,15 @@ export function TaskBoard() {
 
   function toggleDone(task: Task) {
     const now = new Date().toISOString()
+    const nextDone = !task.done
+    const updated = { ...task, done: nextDone, updatedAt: now }
     commit(
-      tasks.map((item) =>
-        item.id === task.id ? { ...item, done: !item.done, updatedAt: now } : item
-      ),
-      task.done ? `Moved ${task.title} back to open.` : `Finished ${task.title}.`
+      tasks.map((item) => (item.id === task.id ? updated : item)),
+      nextDone ? `Finished ${task.title}.` : `Moved ${task.title} back to open.`
     )
+    if (editing?.id === task.id) setEditing(updated)
+    if (nextDone) setFilter("done")
+    else if (filter === "done") setFilter(task.category)
   }
 
   function dismissInstall() {
@@ -178,13 +187,16 @@ export function TaskBoard() {
     setPendingImport(null)
   }
 
+  const viewingDone = filter === "done"
   const visibleOpen =
-    filter === "all" ? openTasks : openTasks.filter((task) => task.category === filter)
-  const visibleDone =
-    filter === "all" ? doneTasks : doneTasks.filter((task) => task.category === filter)
-  const defaultCategory: CategoryId = filter === "all" ? "now" : filter
-  const openTotal = openCount(tasks, filter)
-  const lateTotal = overdueCount(tasks, today, filter)
+    filter === "all" || filter === "done"
+      ? openTasks
+      : openTasks.filter((task) => task.category === filter)
+  const defaultCategory: CategoryId =
+    filter === "all" || filter === "done" ? "now" : filter
+  const openTotal = openCount(tasks, viewingDone ? "all" : filter)
+  const lateTotal = overdueCount(tasks, today, viewingDone ? "all" : filter)
+  const finishedTotal = doneCount(tasks)
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col">
@@ -195,9 +207,21 @@ export function TaskBoard() {
             <p className="mt-1 text-sm text-muted-foreground">Now, Late, and Later</p>
             <p className="mt-2 text-sm">
               <span className="font-medium">
-                {ready ? (openTotal === 1 ? "1 open" : openTotal === 0 ? "All clear" : `${openTotal} open`) : "Loading"}
+                {ready
+                  ? viewingDone
+                    ? finishedTotal === 0
+                      ? "No finished tasks"
+                      : finishedTotal === 1
+                        ? "1 finished"
+                        : `${finishedTotal} finished`
+                    : openTotal === 1
+                      ? "1 open"
+                      : openTotal === 0
+                        ? "All clear"
+                        : `${openTotal} open`
+                  : "Loading"}
               </span>
-              {ready && lateTotal > 0 && (
+              {ready && !viewingDone && lateTotal > 0 && (
                 <span className="text-red-700 dark:text-red-300">
                   {" "}
                   · {lateTotal === 1 ? "1 overdue" : `${lateTotal} overdue`}
@@ -221,7 +245,7 @@ export function TaskBoard() {
           <div className="bg-yellow-400" />
           <div className="bg-green-600" />
         </div>
-        <div className="grid grid-cols-4 gap-1.5 px-4 py-3" role="tablist" aria-label="Lanes">
+        <div className="grid grid-cols-5 gap-1 px-3 py-3" role="tablist" aria-label="Lanes">
           <FilterTab
             label="All"
             count={ready ? openCount(tasks) : null}
@@ -238,6 +262,16 @@ export function TaskBoard() {
               onClick={() => setFilter(id)}
             />
           ))}
+          <FilterTab
+            label="Done"
+            count={ready ? finishedTotal : null}
+            selected={filter === "done"}
+            done
+            onClick={() => {
+              setFilter("done")
+              setConfirmClear(false)
+            }}
+          />
         </div>
       </header>
 
@@ -264,11 +298,75 @@ export function TaskBoard() {
           </div>
         )}
 
-        {ready && visibleOpen.length === 0 && (
-          <EmptyState filter={filter} />
+        {ready && viewingDone && doneTasks.length === 0 && <DoneEmptyState />}
+
+        {ready && viewingDone && doneTasks.length > 0 && (
+          <section aria-labelledby="lane-done">
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 id="lane-done" className="font-heading text-xl">
+                Done
+              </h2>
+              <span className="text-sm text-muted-foreground">{doneTasks.length}</span>
+            </div>
+            <ul className="space-y-2">
+              {doneTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  today={today}
+                  onToggle={toggleDone}
+                  onEdit={openEdit}
+                />
+              ))}
+            </ul>
+            {confirmClear ? (
+              <div className="mt-4 rounded-2xl border px-3 py-3">
+                <p className="text-sm">
+                  Remove {doneTasks.length} finished{" "}
+                  {doneTasks.length === 1 ? "task" : "tasks"} from this phone?
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11"
+                    onClick={() => setConfirmClear(false)}
+                  >
+                    Keep them
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="h-11"
+                    onClick={() => {
+                      const ids = new Set(doneTasks.map((task) => task.id))
+                      commit(
+                        tasks.filter((task) => !ids.has(task.id)),
+                        `Cleared ${doneTasks.length} finished tasks.`
+                      )
+                      setConfirmClear(false)
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4 h-11 w-full rounded-2xl"
+                onClick={() => setConfirmClear(true)}
+              >
+                Clear finished
+              </Button>
+            )}
+          </section>
         )}
 
-        {ready && filter === "all" && visibleOpen.length > 0 &&
+        {ready && !viewingDone && visibleOpen.length === 0 && <EmptyState filter={filter} />}
+
+        {ready && !viewingDone && filter === "all" && visibleOpen.length > 0 &&
           CATEGORY_IDS.map((id) => {
             const laneTasks = visibleOpen.filter((task) => task.category === id)
             if (laneTasks.length === 0) return null
@@ -284,7 +382,7 @@ export function TaskBoard() {
             )
           })}
 
-        {ready && filter !== "all" && visibleOpen.length > 0 && (
+        {ready && !viewingDone && filter !== "all" && visibleOpen.length > 0 && (
           <Lane
             category={filter}
             tasks={visibleOpen}
@@ -292,81 +390,6 @@ export function TaskBoard() {
             onToggle={toggleDone}
             onEdit={openEdit}
           />
-        )}
-
-        {ready && visibleDone.length > 0 && (
-          <section className="mt-2">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-heading text-xl">Finished</h2>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-10"
-                onClick={() => setShowDone((value) => !value)}
-                aria-expanded={showDone}
-              >
-                {showDone ? "Hide" : `Show ${visibleDone.length}`}
-              </Button>
-            </div>
-            {showDone && (
-              <div className="mt-2 space-y-2">
-                <ul className="space-y-2">
-                  {visibleDone.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      today={today}
-                      onToggle={toggleDone}
-                      onEdit={openEdit}
-                    />
-                  ))}
-                </ul>
-                {confirmClear ? (
-                  <div className="rounded-2xl border px-3 py-3">
-                    <p className="text-sm">
-                      Remove {visibleDone.length} finished{" "}
-                      {visibleDone.length === 1 ? "task" : "tasks"} from this phone?
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11"
-                        onClick={() => setConfirmClear(false)}
-                      >
-                        Keep them
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        className="h-11"
-                        onClick={() => {
-                          const ids = new Set(visibleDone.map((task) => task.id))
-                          commit(
-                            tasks.filter((task) => !ids.has(task.id)),
-                            `Cleared ${visibleDone.length} finished tasks.`
-                          )
-                          setConfirmClear(false)
-                          setShowDone(false)
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 w-full rounded-2xl"
-                    onClick={() => setConfirmClear(true)}
-                  >
-                    Clear finished
-                  </Button>
-                )}
-              </div>
-            )}
-          </section>
         )}
 
         {ready && (
@@ -455,6 +478,7 @@ export function TaskBoard() {
         defaultCategory={defaultCategory}
         onSave={handleSave}
         onDelete={handleDelete}
+        onToggleDone={toggleDone}
       />
     </div>
   )
@@ -465,12 +489,14 @@ function FilterTab({
   count,
   selected,
   tone,
+  done,
   onClick,
 }: {
   label: string
   count: number | null
   selected: boolean
   tone?: CategoryId
+  done?: boolean
   onClick: () => void
 }) {
   const lane = tone ? CATEGORIES[tone] : null
@@ -481,11 +507,13 @@ function FilterTab({
       aria-selected={selected}
       onClick={onClick}
       className={cn(
-        "flex min-h-12 flex-col items-center justify-center rounded-2xl px-1 text-sm transition-colors",
+        "flex min-h-12 flex-col items-center justify-center rounded-2xl px-0.5 text-sm transition-colors",
         selected
           ? lane
             ? lane.chip
-            : "bg-primary text-primary-foreground"
+            : done
+              ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+              : "bg-primary text-primary-foreground"
           : "bg-muted text-foreground"
       )}
     >
@@ -497,7 +525,7 @@ function FilterTab({
   )
 }
 
-function EmptyState({ filter }: { filter: LaneFilter }) {
+function EmptyState({ filter }: { filter: Exclude<LaneFilter, "done"> }) {
   if (filter === "all") {
     return (
       <section className="rounded-3xl border border-dashed px-4 py-8">
@@ -526,6 +554,17 @@ function EmptyState({ filter }: { filter: LaneFilter }) {
     <section className={cn("rounded-3xl px-4 py-8", lane.soft)}>
       <h2 className={cn("font-heading text-2xl", lane.ink)}>{lane.emptyTitle}</h2>
       <p className="mt-2 text-sm text-muted-foreground">{lane.emptyBody}</p>
+    </section>
+  )
+}
+
+function DoneEmptyState() {
+  return (
+    <section className="rounded-3xl border border-dashed px-4 py-8">
+      <h2 className="font-heading text-2xl tracking-tight">Done is empty.</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Tap the circle on a task, or open it and choose Mark done. Finished tasks land here.
+      </p>
     </section>
   )
 }

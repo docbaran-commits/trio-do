@@ -6,7 +6,9 @@ A personal to-do list for your phone. Tasks sit in three lanes:
 - **Late** is yellow. What’s already slipping.
 - **Later** is green. What’s still ahead.
 
-Every task has a due date. The list is saved in the browser on that phone. Nothing is sent to a server.
+Every task has a due date. Mark a task done with the circle on the left, or open it and tap **Mark done**. Finished tasks move into the **Done** pile (with its own count in the top tabs). From a task, **Add due date to Calendar** downloads an `.ics` file you can open into the iPhone Calendar app — the web app cannot write to Calendar directly.
+
+The list is saved in the browser on that phone. Nothing is sent to a server.
 
 ## Run it locally
 

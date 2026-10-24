@@ -1,11 +1,14 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import {
+  buildTaskIcs,
   dayDiff,
+  doneCount,
   dueInfo,
   isRealDate,
   mergeTasks,
   normalizeTask,
+  openCount,
   parseBackup,
   todayISO,
   type Task,
@@ -71,5 +74,39 @@ describe("backups", () => {
 
   it("rejects a blank title", () => {
     assert.equal(normalizeTask(task({ title: "   " })), null)
+  })
+})
+
+describe("counts", () => {
+  it("separates open and done piles", () => {
+    const list = [
+      task({ id: "1", done: false, category: "now" }),
+      task({ id: "2", done: true, category: "late" }),
+      task({ id: "3", done: false, category: "late" }),
+    ]
+    assert.equal(openCount(list), 2)
+    assert.equal(openCount(list, "late"), 1)
+    assert.equal(openCount(list, "done"), 0)
+    assert.equal(doneCount(list), 1)
+  })
+})
+
+describe("calendar", () => {
+  it("builds an all-day ICS event for the due date", () => {
+    const ics = buildTaskIcs(
+      task({
+        id: "appt-1",
+        title: "Dentist, check-up",
+        notes: "Bring insurance card",
+        dueDate: "2026-10-24",
+        category: "now",
+      })
+    )
+    assert.match(ics, /BEGIN:VCALENDAR/)
+    assert.match(ics, /DTSTART;VALUE=DATE:20261024/)
+    assert.match(ics, /DTEND;VALUE=DATE:20261025/)
+    assert.match(ics, /SUMMARY:Dentist\\, check-up/)
+    assert.match(ics, /DESCRIPTION:Bring insurance card\\nLane: Now/)
+    assert.match(ics, /UID:appt-1@3lists/)
   })
 })

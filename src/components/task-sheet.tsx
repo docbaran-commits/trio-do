@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
+import { CheckIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,13 +18,13 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   CATEGORIES,
   CATEGORY_IDS,
+  downloadTaskIcs,
   todayISO,
   type CategoryId,
   type Task,
   type TaskDraft,
 } from "@/lib/tasks"
 import { cn } from "cn"
-import { XIcon } from "lucide-react"
 
 export function TaskSheet({
   open,
@@ -32,6 +33,7 @@ export function TaskSheet({
   defaultCategory,
   onSave,
   onDelete,
+  onToggleDone,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -39,6 +41,7 @@ export function TaskSheet({
   defaultCategory: CategoryId
   onSave: (draft: TaskDraft) => void
   onDelete: (id: string) => void
+  onToggleDone: (task: Task) => void
 }) {
   const titleId = useId()
   const dateId = useId()
@@ -50,6 +53,7 @@ export function TaskSheet({
   const [category, setCategory] = useState<CategoryId>(defaultCategory)
   const [dueDate, setDueDate] = useState("")
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [calendarHint, setCalendarHint] = useState("")
 
   useEffect(() => {
     if (open && !wasOpen.current) {
@@ -58,6 +62,7 @@ export function TaskSheet({
       setCategory(initial?.category ?? defaultCategory)
       setDueDate(initial?.dueDate ?? todayISO())
       setConfirmDelete(false)
+      setCalendarHint("")
       const focusTimer = window.setTimeout(() => titleRef.current?.focus(), 250)
       wasOpen.current = true
       return () => window.clearTimeout(focusTimer)
@@ -187,6 +192,47 @@ export function TaskSheet({
             >
               {editing ? "Save changes" : "Add task"}
             </Button>
+
+            {editing && (
+              <Button
+                type="button"
+                variant={initial.done ? "outline" : "secondary"}
+                className="h-12 rounded-2xl text-base"
+                onClick={() => onToggleDone(initial)}
+              >
+                <CheckIcon />
+                {initial.done ? "Move back to open" : "Mark done"}
+              </Button>
+            )}
+
+            {editing && (
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl text-base"
+                  onClick={() => {
+                    const ok = downloadTaskIcs({
+                      ...initial,
+                      title: title.trim() || initial.title,
+                      notes: notes.trim(),
+                      category,
+                      dueDate: dueDate || initial.dueDate,
+                    })
+                    setCalendarHint(
+                      ok
+                        ? "Opened a calendar file. On iPhone, open it and choose Add to Calendar."
+                        : "Couldn’t create a calendar file on this phone."
+                    )
+                  }}
+                >
+                  Add due date to Calendar
+                </Button>
+                {calendarHint && (
+                  <p className="text-sm text-muted-foreground">{calendarHint}</p>
+                )}
+              </div>
+            )}
 
             {editing && !confirmDelete && (
               <Button

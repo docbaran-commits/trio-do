@@ -1,7 +1,7 @@
 export const CATEGORY_IDS = ["now", "late", "later"] as const
 
 export type CategoryId = (typeof CATEGORY_IDS)[number]
-export type LaneFilter = "all" | CategoryId
+export type LaneFilter = "all" | CategoryId | "done"
 
 export type Task = {
   id: string
@@ -224,15 +224,84 @@ export function parseBackup(raw: string): Task[] | null {
 }
 
 export function openCount(tasks: Task[], filter: LaneFilter = "all") {
+  if (filter === "done") return 0
   return tasks.filter(
     (task) => !task.done && (filter === "all" || task.category === filter)
   ).length
 }
 
+export function doneCount(tasks: Task[]) {
+  return tasks.filter((task) => task.done).length
+}
+
 export function overdueCount(tasks: Task[], today = todayISO(), filter: LaneFilter = "all") {
   return tasks.filter((task) => {
     if (task.done) return false
+    if (filter === "done") return false
     if (filter !== "all" && task.category !== filter) return false
     return dayDiff(today, task.dueDate) < 0
   }).length
+}
+
+function icsEscape(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;")
+}
+
+function icsStamp(iso: string) {
+  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "")
+}
+
+/** All-day calendar event for a task due date. Opens as an .ics file on iPhone. */
+export function buildTaskIcs(task: Task) {
+  const stamp = icsStamp(new Date().toISOString())
+  const due = task.dueDate.replace(/-/g, "")
+  const endDate = (() => {
+    const next = parseISODate(task.dueDate)
+    next.setDate(next.getDate() + 1)
+    return todayISO(next).replace(/-/g, "")
+  })()
+  const descriptionParts = [
+    task.notes.trim() || null,
+    `Lane: ${CATEGORIES[task.category].label}`,
+  ].filter((part): part is string => Boolean(part))
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//3 Lists//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${task.id}@3lists`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${due}`,
+    `DTEND;VALUE=DATE:${endDate}`,
+    `SUMMARY:${icsEscape(task.title)}`,
+    `DESCRIPTION:${icsEscape(descriptionParts.join("\n"))}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n")
+}
+
+export function downloadTaskIcs(task: Task) {
+  if (typeof window === "undefined") return false
+  try {
+    const blob = new Blob([buildTaskIcs(task)], { type: "text/calendar" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    const safeName = task.title.replace(/[^\w\s-]+/g, "").trim().slice(0, 40) || "task"
+    link.href = url
+    link.download = `${safeName}.ics`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    return true
+  } catch {
+    return false
+  }
 }
